@@ -1,0 +1,1692 @@
+Title: Writeup for Project 4, Fall 2010
+Date : 12/05/2010
+Group Number: 58
+
+Name				   				Email					Student Id 
+Naveen Bangalore NanjundaPrasad	   			nbangalo@usc.edu				5752-7730-16
+Vishak Nag Ashoka		  			ashoka@usc.edu      				9791-1175-66
+Jida Wen			   			jidawen@usc.edu     				6412-1395-84 
+
+------------------
+I. Requirements:
+------------------
+
+
+	-----------
+	  Part 1
+	-----------  
+	
+	+ Implement a fully distributed system for Carl's Jr. simulation
+	
+		In this project we need to transfer our Cral's Jr. simulation into a fully distributed system and We don't need to
+		worry the memory problem. Because it is a fully distributed system, there should not be any central server in the system. 
+		Instead we will have a networking thread for each user program which represent one entity like a custom in Carl's Jr. 
+		In order to make the whole system work for multiple nachos instance while there is no central sever inside,	the synchronization
+		of the networking thread is key part for this distributed system. We need to achieve the total ordering of event among the 
+		networking threads. This would allow each networking thread working as a server	and deal with its own data structure without
+		conflict with other thread. And the user program just need to behave depend on its own networking thread. Finally all user 
+		program should complete their code without error.
+		
+	--------------------
+	  Extra credit part
+	--------------------		
+		
+	+ Make the fully distributed system having the ability to handle lost packets
+
+		The kernel function sends a sequence number to the other kernel functions. Each kernel function sends a fixed number of messages
+		to all other kernel functions. Any message received in order is to printed out for a particular machine-ID/mailbox-number combination.
+		Messages received out of order are not printed. Each kernel function prints out messages in increasing sequence number order for each other kernel function. 
+		
+------------------
+II. Assumption:
+------------------
+
+------------------
+III. Design:
+------------------
+
+	------------------------------------------------
+	  Design of how the distributed system works
+	------------------------------------------------
+
+		In this step, we just make clear how our distributed system works. In this fully distributed system, each userprogram thread has its own
+		networking thread and the networking thread next to it. The networking thread acts like a server for the userprogram thread. It was created 
+		when we use the Exec() systemcall. When we create the process with a userprogram thread, we also add a networking thread next to it, means
+		the mailbox number is just 1 bigger than the userprogram thread. The userprogram thread can only send message to its own networking thread.
+		And it's the networking threads' duty to communicate with each other and make the right decision. Of course the networking thread is only 
+		responsible for its own userprogram too. The critical part for the system is the communication among those networking threads. They need to 
+		work independent for their own data and synchronized with each other when working together.
+		
+
+	----------------------------------------------------------
+	  Design for the entities in the fully distributed system
+	----------------------------------------------------------
+
+	+ Userprogram thread Design
+			
+		The project 4 userprogram is very similar like what in the project 3 part 3. Actually the whole networking is transparent to the userprogram,
+		the userprogram shouldn't know anything about how the system works. It just need to  perform kernel opertion through the system call. That will 
+		got transferred in exception.cc and access the according kernel system call which is like what we did in project 3 part 3. Then the procedure is
+		little different for the userprogram thread, it will send message to its own networking thread instead to the central server to tell what it needs
+		to do. As the userprogram and networking thread are in the same nachos instance, so there is no RPC call functions. All the function it performs
+		should be done inside the networking thread not in the seperate RPC function.
+
+	+ Registration server Design
+
+		In order to communicate with other networking threads, we need to know the machine ID and the mailbox number of all the networking threads. So we 
+		need a registration sever to do that. Although in fully distributed system there is no central server, we still need a thread acts like a server
+		to tell all the networking threads the information for the other ones. Every time a networking thread created, it needs to send its information 
+		to this server, like its machine ID and the mailbox number. The machine ID and mailbox number for this server is already knowed by all the networking
+		threads. And the server already known how many networking threads will be in this simulation. So after all the networking threads send their information
+		to the server, it construct one or several messages and send all these message to all the networking threads, so all the networking threads can 
+		build up a group table which stores all the information for the networking threads in the system and use this table to communicate with them. Actually
+		after the simulation started the server instance job is finished and we can close it.
+
+	+ Networking thread Design
+
+		Networking threads is the most important part for this fully distributed system. By communication with each other and reply to their own userprogram
+		thread they perform the essential part of the distributed system. Each networking thread has its own data base for locks, conditionvariables, or
+		monitor variables. Every networking thread will update their data base seperately but their action are always same. So we can achieve total ordering 
+		of event and solve the race condition even without a central server.
+
+		When simulation starts the first thing a networking thread needs to do is get registed in the registration sever. After it receive the reply message 
+		from the sever shows everyone is ready  it can update the group table which contains the information of other threads. Then there is 5 second delay 
+		to make sure the other networking threads group table also get updated. Then the networking thread will fall in a while loop means always waiting for 
+		message from other entities in the system. In general there are two situations for the networking thread receive message from others: one is this 
+		message is from its own userprogram, another is this message is from system networking threads including itself. If this message is from its own 
+		userprogram it just append a timestamp to this message and send it to all networking threads including itself. If this message is from the networking 
+		threads in the system it needs to perform the total ordering of event and perform the accordingly tasks.
+
+		The total ording of event can done by several steps. After receive the message, it will check whether this received message is a action message or
+		update message. If it is a update type message we will extract the timestamp information and use that information to update its group table entry 
+		for the relavent group member. If its a action type message we should extract what action which it needs to perform and put it into the message Queue.
+		This queue stores the action that has not yet been processed. Then we get a new timestamp and construct a update message and send to every networking
+		threads including myself. After doing all these there is a common step for these two types that is remove the action in the tobeprocessed message 
+		Queue and make a compare. If the timeStamp of this removed action message is less the the least timeStamp value for all the entries in group table, 
+		we can start processing this action. Otherwise we have to put this action back to the message Queue and wait for the group table update next time.
+		  
+		when we  process the actual action the userprogram thread needed, the way is quite similar to what the RPC calls in project 3 part 3. Just we need to 
+		extract the action type from the message we got and perform the different tasks according to the different action type. And all these tasks are in the 
+		networking function not in seperate RPC calls and reply the userprogram or not in the different case. Then after doing all these steps the networking 
+		thread fall in the while loop again and start waiting for the other messages.
+
+	
+	--------------------------------------------------------------------
+	  Design for transform Carl's Jr Entities to the ditributed system
+	--------------------------------------------------------------------
+
+		
+		
+	----------------------------------------------------------
+	  Design for Extra Credit (Packet Loss)
+	----------------------------------------------------------
+	When the packet loss is enabled by -l flag, the the kernel function in nettest is invoked which sends out the messages to all 
+	the machines that are running and waits for the reply each of the machines. After 200 nachos ticks the resendTimerFunction
+	is called which calls the resend message function. The resend message function sends out all the contents in the message
+	queue, this function gets call after 2 seconds. The kernel function in nettest will send out the packets and waits until it
+	hears from other machines. When it receieves message from other machine it is checked to see if it ACK message if it is not
+	a ACK message a ACK message is sent out for this new message. Next, if the message is supposed to be ACK the it is checked
+	whether already a ACK message has been sent for this machine if so again the ACK message is not sent. In post.cc it is checked
+	to see if the packet loss has been enabled and the message send from the kernel function is checked to see that it is not a
+	a ACK message if so the message is appended to the message queue and is sent out.
+	
+
+---------------------
+VI. Implementation:
+---------------------
+
+	+ Files modified	  
+	  
+	-- Exception.cc
+	-- testfiles.c
+	-- halt.c
+	--- post.cc
+	-- system.cc
+	-- nettest.cc
+
+	+ Data Structures added, and the file they were added to. 
+  
+	-- Add in file exception.cc
+	
+		struct groupEntry
+		{
+			int machineId;
+			int mailBox;
+			long int timeStamp;
+		};
+
+		struct eventOrderEntry
+		{
+			char replymessage[100];
+			PacketHeader replyOutPktHdr;
+			MailHeader replyOutMailHdr;
+			long int timeStamp;
+		};
+
+
+
+	+ Functions added and in which file. 
+
+	--added in file exception.cc
+	
+		void NetworkingThread() {
+		
+		}
+
+		void StartSimulation_Syscall() {
+		
+		}
+
+	-- added in file system.cc
+	
+		void resendTimer(int nothing)
+		{
+		
+		}
+		void resendMessage()
+		{
+		
+		}
+		
+	-- added in nettest.cc
+
+		void kernelFunction()
+		{
+		
+		
+		}
+	+ Functions modified and in which file. 
+
+	--modified in exception.cc 
+	
+		int CreateLock_Syscall(unsigned int vaddr, int len, int uniqueId) {
+
+		}
+		
+		int Acquire_Syscall(unsigned int lockIndex) {
+
+		}
+		
+		int Release_Syscall(unsigned int lockIndex) {
+
+		}
+		
+		int DestroyLock_Syscall(unsigned int lockIndex) {
+
+		}
+		
+		int CreateCV_Syscall(unsigned int vaddr, int len, int uniqueId) {
+
+		}
+		
+		int Wait_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+		}
+		
+		int Signal_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+		}
+		
+		int Broadcast_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+		}
+		
+		int DestroyCV_Syscall(unsigned int CVIndex) {
+
+		}
+
+	--modified in halt.c and testfiles.c
+
+		int main() {
+		
+		}
+	
+	--modified in post.cc
+	 send()
+	 {
+	 
+	 }
+			
+
+-----------------
+V. Testing: 
+-----------------
+
+	+ The test part can do several functions. So when enter the the command "nachos -m 1 -o 0 -x ../test/testfiles" we can have 
+	following choices and the following menu is displayed.
+
+
+
+                                --------------------------------------------------------------
+
+                                             PROJECT 4            GROUP - 58
+
+                                                        Distributed Systems
+                                              >>>>>>>> TEST CASES PART 1 <<<<<<<<
+
+                                --------------------------------------------------------------
+
+	 1 > Create Lock networking Test
+	 2 > Acquire and release integrated
+	 3 > Create CV networking Test
+	 4 > Wait-Signal synchronization Test
+	 5 > Broadcast networking Test
+	 6 > Create Monitor Variable Test
+	 7 > Get and Set Monitor Variable Test
+
+
+	Enter the index of the testcase you want to run here ->
+
+	+ How to test
+		
+	There are two mainly ways to choose the test. We can do that one by one in a single machine or open
+	multiple machine to let them do the different tasks.
+	
+	---------------------------------------
+	Single nachos instance networking Test
+	---------------------------------------
+	
+	In this test we need to have an registration server that use command "nachos -i 1" to run it since
+	we just need 1 nachos windows. Then we can choose the according number to choose what test we want to run 
+	like create lock or monitor variable. Actually the output of these test are all integrated into one
+	case. So in some case even we choose different test number the result is same, and we test the CreateLock,
+	Create Condition, Acquire and Release, Wait and Signal, Create monitor Variable together.
+	
+	The output for these case is as follows:
+	
+	Enter the index of the testcase you want to run here ->1
+	created addrspace
+	userprog mail box = 1
+	net thread mail box = 2
+	net thread mail box = 2
+	came back here
+	NetworkingThread : in net thread with mail box = 2
+	Networking Thread : start waiting for first msg from user program on mailbox 2
+	Calling start simulation
+	StartSimulation_Syscall
+	StartSimulation_Syscall : sending Are you ready? message to net thread
+	StartSimulation_Syscall : Client sending the StartSimulation request to the networking thread
+	Networking Thread : Got "Are you ready?" from 1, box 1
+	NetworkingThread : received first message from userprog
+	NetworkingThread : Server, get me registered msg sent to server
+	Networking Thread : First Server reply received -  "1@1@" from 0, box 0
+	Networking Thread : Got "102@" from 0, box 0
+	Networking Thread : looping and receiving the data messages from reg server
+	Networking Thread : storing the net thread details machine id = 1 and mail box number = 2
+	Networking Thread : looping and receiving the data messages from reg server
+
+	__________________________________________________________
+					INITIAL GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       -1
+	__________________________________________________________
+
+	Networking Thread : sending HEY USERPROG, IM READY msg to userprogram at mailbox 1
+
+	WAIT for all NET threads to get ready for group communiation
+	StartSimulation_Syscall : received reply message from net thread
+	StartSimulation_Syscall : Msg from networking thread :  Hey UserProg, Im ready
+
+	In halt.c
+
+	----------------------------------------------------------------
+					CREATELOCK      TEST CASE
+	-----------------------------------------------------------------
+	CreateLock_Syscall : Client sending the Create Lock request to the Networking Thread
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : Client waiting to receive Create Lock request reply
+	Networking Thread : Got "1 firstlock1" from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock1@1292395024@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292395024
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock1
+	ACTION TYPE = 1 with timeStamp 1292395024
+	Networking Thread : reply message is -> 0
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292396350@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : Msg fron Server : 0
+
+	***********TestFiles : SETP1 Create firstlock1 return value is 0************
+
+	CreateLock_Syscall : Client sending the Create Lock request to the Networking Thread
+	CreateLock_Syscall : Client waiting to receive Create Lock request reply
+	Networking Thread : Got "1 firstlock2" from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock2@1292399176@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292399176
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock2
+	ACTION TYPE = 1 with timeStamp 1292399176
+	Networking Thread : reply message is -> 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292400117@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : Msg fron Server : 1
+
+	***********TestFiles : SETP2 Create firstlock2  return value is 1************
+
+	CreateLock_Syscall : Client sending the Create Lock request to the Networking Thread
+	Networking Thread : Got "1 " from 1, box 1
+	CreateLock_Syscall : Client waiting to receive Create Lock request reply
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 @1292404266@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292404266
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1
+	ACTION TYPE = 1 with timeStamp 1292404266
+	Networking Thread : Lock Name not sent to the Networking Thread
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292405301@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : FAILURE : Lock Name is NULL
+
+	***********TestFiles : SETP3 Create invalidlock return value is -1************
+
+	CreateLock_Syscall : Client sending the Create Lock request to the Networking Thread
+	Networking Thread : Got "1 secondlock" from 1, box 1
+	CreateLock_Syscall : Client waiting to receive Create Lock request reply
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 secondlock@1292408755@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292408755
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 secondlock
+	ACTION TYPE = 1 with timeStamp 1292408755
+	Networking Thread : reply message is -> 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292409802@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : Msg fron Server : 2
+
+	***********TestFiles : SETP4 Create secondlock return value is 2************
+
+	CreateLock_Syscall : Client sending the Create Lock request to the Networking Thread
+	CreateLock_Syscall : Client waiting to receive Create Lock request reply
+	Networking Thread : Got "1 secondlock" from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 secondlock@1292412674@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292412674
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 secondlock
+	ACTION TYPE = 1 with timeStamp 1292412674
+	Networking Thread : Lock already exists with the same name secondlock
+	Networking Thread : reply message is -> 2 : Lock already exists
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292413619@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : Msg fron Server : 2 : Lock already exists
+
+	***********TestFiles : SETP5 Create secondlock return value is 2************
+
+
+	----------------------------------------------------------------
+					CREATE CONDITION TEST
+	-----------------------------------------------------------------
+	Networking Thread : Got "5 firstCV1" from 1, box 1
+	CreateCV_Syscall : Client sending the message to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@5 firstCV1@1292419881@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292419881
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 5 firstCV1
+	ACTION TYPE = 5 with timeStamp 1292419881
+	CreateCVRPC : reply message is -> 0
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292420950@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateCV_Syscall : CV Index received from server is 0
+	CreateCV_Syscall : Msg fron Server : 0
+
+	******TestFiles : SETP1 Create a CV have index 1 return value is 0*******
+
+	CreateCV_Syscall : Client sending the message to the server
+	Networking Thread : Got "5 firstCV2" from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@5 firstCV2@1292423805@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292423805
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 5 firstCV2
+	ACTION TYPE = 5 with timeStamp 1292423805
+	CreateCVRPC : reply message is -> 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292424795@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateCV_Syscall : CV Index received from server is 1
+	CreateCV_Syscall : Msg fron Server : 1
+
+	******TestFiles : SETP2 Create a CV have index 2 return value is 0*******
+
+	Networking Thread : Got "5 " from 1, box 1
+	CreateCV_Syscall : Client sending the message to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@5 @1292428881@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292428881
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 5
+	ACTION TYPE = 5 with timeStamp 1292428881
+	Networking Thread : CV Name not sent to the Server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292429913@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateCV_Syscall : FAILURE : CV Name is NULL
+
+	******TestFiles : SETP3 Create a CV have no name return value is 0*******
+
+	Networking Thread : Got "5 secondCV" from 1, box 1
+	CreateCV_Syscall : Client sending the message to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@5 secondCV@1292432567@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292432567
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 5 secondCV
+	ACTION TYPE = 5 with timeStamp 1292432567
+	CreateCVRPC : reply message is -> 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292433598@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateCV_Syscall : CV Index received from server is 2
+	CreateCV_Syscall : Msg fron Server : 2
+
+	******TestFiles : SETP4 Create a CV name is secondCV return value is 0*******
+
+	Networking Thread : Got "5 secondCV" from 1, box 1
+	CreateCV_Syscall : Client sending the message to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@5 secondCV@1292437001@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292437001
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 5 secondCV
+	ACTION TYPE = 5 with timeStamp 1292437001
+	CreateCVRPC : CV already exists with the same name secondCV
+	CreateCVRPC : reply message is -> 2 : CV already exists
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292438047@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateCV_Syscall : CV Index received from server is 2
+	CreateCV_Syscall : Msg fron Server : 2 : CV already exists
+
+	******TestFiles : SETP4 Create same CV name secondCV return value is 0*******
+
+
+	----------------------------------------------------------------
+					SIGNAL AND WAIT TEST
+	-----------------------------------------------------------------
+	Networking Thread : Got "5 firstCV1" from 1, box 1
+	CreateCV_Syscall : Client sending the message to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@5 firstCV1@1292444138@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292444138
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 5 firstCV1
+	ACTION TYPE = 5 with timeStamp 1292444138
+	CreateCVRPC : CV already exists with the same name firstCV1
+	CreateCVRPC : reply message is -> 0 : CV already exists
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292445174@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateCV_Syscall : CV Index received from server is 0
+	CreateCV_Syscall : Msg fron Server : 0 : CV already exists
+	Networking Thread : Got "5 firstCV2" from 1, box 1
+	CreateCV_Syscall : Client sending the message to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@5 firstCV2@1292447502@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292447502
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 5 firstCV2
+	ACTION TYPE = 5 with timeStamp 1292447502
+	CreateCVRPC : CV already exists with the same name firstCV2
+	CreateCVRPC : reply message is -> 1 : CV already exists
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292448553@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateCV_Syscall : CV Index received from server is 1
+	CreateCV_Syscall : Msg fron Server : 1 : CV already exists
+	Networking Thread : Got "2 0" from 1, box 1
+	Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@2 0@1292450963@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292450963
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 0
+	ACTION TYPE = 2 with timeStamp 1292450963
+	AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292452014@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Acquire_Syscall : Client receive the reply msg from sever 0
+	Acquire_Syscall : Acquired Lock Index received from server is 0
+	Acquire_Syscall : Msg fron Server : 0 : Lock 0 is Acquired
+	Networking Thread : Got "6 -1 0" from 1, box 1
+	Wait_Syscall : Client sending the wait request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@6 -1 0@1292455164@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292455164
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 6 -1 0
+	ACTION TYPE = 6 with timeStamp 1292455164
+	CVWaitRPC : The Actual userprogram of SenderMachineID is 1 and SenderMailBoxNumcer is 1
+	CVWaitRPC : Wait failure This is my userprogram so send reply message to machineID 1 MailNo. 1 MyId is 1 mail 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292456204@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Wait_Syscall : Server replied after the CV -1 wait request
+	Wait_Syscall : FAILURE : Invalid CV index -1
+
+
+	******TestFiles : SETP1 Wait in invalid CVIndex return value is -1*******
+
+	Wait_Syscall : Client sending the wait request to the server
+	Networking Thread : Got "6 0 10" from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@6 0 10@1292459044@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292459044
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 6 0 10
+	ACTION TYPE = 6 with timeStamp 1292459044
+	CVWaitRPC : The Actual userprogram of SenderMachineID is 1 and SenderMailBoxNumcer is 1
+	CVWaitRPC : Wait failure This is my userprogram so send reply message to machineID 1 MailNo. 1 MyId is 1 mail 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292459984@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Wait_Syscall : Server replied after the CV 0 wait request
+	Wait_Syscall : FAILURE : Invalid Lock index 10
+
+
+	******TestFiles : SETP2 Wait in invalid LockIndex return value is -1********
+
+	Networking Thread : Got "3 0" from 1, box 1
+	Release_Syscall : Client sending the Release Lock 0 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@3 0@1292462685@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292462685
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 3 0
+	ACTION TYPE = 3 with timeStamp 1292462685
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292463738@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Release_Syscall : Server replied for release lock request
+	ReleaseLock_Syscall : Released Lock Index received from server is 0
+	ReleaseLock_Syscall : Msg fron Server : 0 : Lock 0 is Released
+	Networking Thread : Got "6 0 0" from 1, box 1
+	Wait_Syscall : Client sending the wait request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@6 0 0@1292466087@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292466087
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 6 0 0
+	ACTION TYPE = 6 with timeStamp 1292466087
+	CVWaitRPC : The Actual userprogram of SenderMachineID is 1 and SenderMailBoxNumcer is 1
+	CVWaitRPC : Wait failure This is my userprogram so send reply message to machineID 1 MailNo. 1 MyId is 1 mail 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292467123@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Wait_Syscall : Server replied after the CV 0 wait request
+	Wait_Syscall : FAILURE : Not Lock 0 owner
+
+	*****TestFiles : SETP3 Wait in validlock not own by me return value is -1*****
+
+	Networking Thread : Got "2 0" from 1, box 1
+	Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@2 0@1292471466@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292471466
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 0
+	ACTION TYPE = 2 with timeStamp 1292471466
+	AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292472503@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Acquire_Syscall : Client receive the reply msg from sever 0
+	Acquire_Syscall : Acquired Lock Index received from server is 0
+	Acquire_Syscall : Msg fron Server : 0 : Lock 0 is Acquired
+	Networking Thread : Got "7 -1 0" from 1, box 1
+	Signal_Syscall : Client sending the signal request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@7 -1 0@1292474849@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292474849
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 7 -1 0
+	ACTION TYPE = 7 with timeStamp 1292474849
+	CVsignalRPC : The Actual userprogram of SenderMachineID is 1 and SenderMailBoxNumcer is 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292475817@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Signal_Syscall : Server replied after signal request
+	Signal_Syscall : FAILURE : Invalid CV index 0
+
+	******TestFiles : SETP1 Signal in invalid CVIndex return value is -1******
+
+	Networking Thread : Got "7 0 10" from 1, box 1
+	Signal_Syscall : Client sending the signal request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@7 0 10@1292481240@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292481240
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 7 0 10
+	ACTION TYPE = 7 with timeStamp 1292481240
+	CVsignalRPC : The Actual userprogram of SenderMachineID is 1 and SenderMailBoxNumcer is 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292482286@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Signal_Syscall : Server replied after signal request
+	Signal_Syscall : FAILURE : Invalid Lock index 10
+
+	******TestFiles : SETP2 Signal in invalid LockIndex return value is -1******
+
+	Networking Thread : Got "3 0" from 1, box 1
+	Release_Syscall : Client sending the Release Lock 0 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@3 0@1292485817@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292485817
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 3 0
+	ACTION TYPE = 3 with timeStamp 1292485817
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292486869@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Release_Syscall : Server replied for release lock request
+	ReleaseLock_Syscall : Released Lock Index received from server is 0
+	ReleaseLock_Syscall : Msg fron Server : 0 : Lock 0 is Released
+	Networking Thread : Got "7 0 0" from 1, box 1
+	Signal_Syscall : Client sending the signal request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@7 0 0@1292489233@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292489233
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 7 0 0
+	ACTION TYPE = 7 with timeStamp 1292489233
+	CVsignalRPC : The Actual userprogram of SenderMachineID is 1 and SenderMailBoxNumcer is 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292490270@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Signal_Syscall : Server replied after signal request
+	Signal_Syscall : FAILURE : Not Lock 0 owner
+
+	******TestFiles : SETP3 Signal in validlock not own by me return value is -1*****
+
+
+	---------------------------------------------------------------
+					ACQUIRE AND RELEASE TEST
+	-----------------------------------------------------------------
+	Networking Thread : Got "2 0" from 1, box 1
+	Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@2 0@1292496327@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292496327
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 0
+	ACTION TYPE = 2 with timeStamp 1292496327
+	AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292497385@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Acquire_Syscall : Client receive the reply msg from sever 0
+	Acquire_Syscall : Acquired Lock Index received from server is 0
+	Acquire_Syscall : Msg fron Server : 0 : Lock 0 is Acquired
+
+	******TestFiles : STEP1 Halt in critical region of lockIndex 0*****
+
+	Acquire_Syscall : Client sending the AcquireLock -1 request to the server
+	Networking Thread : Got "2 -1" from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@2 -1@1292500226@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292500226
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 -1
+	ACTION TYPE = 2 with timeStamp 1292500226
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292501177@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Acquire_Syscall : Client receive the reply msg from sever -1
+	Acquire_Syscall : FAILURE : Lock -1 is Destroyed
+
+	 ****** TestFiles1 : STEP2 Acquire lock -1  return value is -1******
+
+	Networking Thread : Got "2 5" from 1, box 1
+	Acquire_Syscall : Client sending the AcquireLock 5 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@2 5@1292504586@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292504586
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 5
+	ACTION TYPE = 2 with timeStamp 1292504586
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292505637@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Acquire_Syscall : Client receive the reply msg from sever 5
+	Acquire_Syscall : FAILURE : Lock 5 is Destroyed
+
+	 ****** TestFiles1 : STEP3 Acquire lock 5  return value is -1******
+
+	Networking Thread : Got "3 1" from 1, box 1
+	Release_Syscall : Client sending the Release Lock 1 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@3 1@1292508923@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292508923
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 3 1
+	ACTION TYPE = 3 with timeStamp 1292508923
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292509978@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Release_Syscall : Server replied for release lock request
+	ReleaseLock_Syscall : FAILURE : Not Lock 1 owner
+
+	 ****** TestFiles1 : STEP4 Release firstlock2 return value is -1******
+
+	Networking Thread : Got "2 0" from 1, box 1
+	Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@2 0@1292513318@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292513318
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 0
+	ACTION TYPE = 2 with timeStamp 1292513318
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292514368@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Acquire_Syscall : Client receive the reply msg from sever 0
+	Acquire_Syscall : Acquired Lock Index received from server is 0
+	Acquire_Syscall : Msg fron Server : 0 : Is owner of Lock 0
+
+	 ****** TestFiles1 : STEP5 Halt1 Acquire lock1 again the return value is 0******
+
+	Release_Syscall : Client sending the Release Lock 0 request to the server
+	Networking Thread : Got "3 0" from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@3 0@1292517139@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292517139
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 3 0
+	ACTION TYPE = 3 with timeStamp 1292517139
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292518087@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Release_Syscall : Server replied for release lock request
+	ReleaseLock_Syscall : Released Lock Index received from server is 0
+	ReleaseLock_Syscall : Msg fron Server : 0 : Lock 0 is Released
+
+	 ******TestFiles1 : STEP6 Halt1 Release the firstlock return value is 0******
+
+	Networking Thread : Got "3 0" from 1, box 1
+	Release_Syscall : Client sending the Release Lock 0 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@3 0@1292522144@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292522144
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 3 0
+	ACTION TYPE = 3 with timeStamp 1292522144
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292523198@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Release_Syscall : Server replied for release lock request
+	ReleaseLock_Syscall : FAILURE : Not Lock 0 owner
+
+	 ****** TestFiles1 : STEP7 Halt1 Release the firstlock return value is -1******
+
+
+	---------------------------------------------------------------
+					CREATE MONITOR VARIABLE TEST
+	-----------------------------------------------------------------
+	CreateMV_Syscall : Client sending the Create MV request to the server
+	Networking Thread : Got "10 firstMV1" from 1, box 1
+	CreateMV_Syscall : Client waiting to receive Create MV request reply
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@10 firstMV1@1292529356@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292529356
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 10 firstMV1
+	ACTION TYPE = 10 with timeStamp 1292529356
+	CreateMVRPC : reply message is -> 0
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292530420@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateMV_Syscall : MV Index received from server is 0
+	CreateMV_Syscall : Msg fron Server : 0
+
+	******TestFiles : SETP1 Create a MV have index 1 return value is 0*******
+
+	CreateMV_Syscall : Client sending the Create MV request to the server
+	Networking Thread : Got "10 firstMV2" from 1, box 1
+	CreateMV_Syscall : Client waiting to receive Create MV request reply
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@10 firstMV2@1292533906@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292533906
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 10 firstMV2
+	ACTION TYPE = 10 with timeStamp 1292533906
+	CreateMVRPC : reply message is -> 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292534957@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateMV_Syscall : MV Index received from server is 1
+	CreateMV_Syscall : Msg fron Server : 1
+
+	******TestFiles : SETP2 Create a MV have index 2 return value is 1*******
+
+	CreateMV_Syscall : Client sending the Create MV request to the server
+	CreateMV_Syscall : Client waiting to receive Create MV request reply
+	Networking Thread : Got "10 " from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@10 @1291537790@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1291537790
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 10
+	ACTION TYPE = 10 with timeStamp 1291537790
+	Networking Thread : MV Name not sent to the Server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1291538746@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateMV_Syscall : FAILURE : MV Name is NULL
+
+	******TestFiles : SETP3 Create a MV have no name return value is -1*******
+
+	CreateMV_Syscall : Client sending the Create MV request to the server
+	Networking Thread : Got "10 secondMV" from 1, box 1
+	CreateMV_Syscall : Client waiting to receive Create MV request reply
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@10 secondMV@1291542255@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1291542255
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 10 secondMV
+	ACTION TYPE = 10 with timeStamp 1291542255
+	CreateMVRPC : reply message is -> 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1291543322@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateMV_Syscall : MV Index received from server is 2
+	CreateMV_Syscall : Msg fron Server : 2
+
+	******TestFiles : SETP4 Create a MV name is secondMV return value is 2*******
+
+	CreateMV_Syscall : Client sending the Create MV request to the server
+	Networking Thread : Got "10 secondMV" from 1, box 1
+	CreateMV_Syscall : Client waiting to receive Create MV request reply
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@10 secondMV@1291546909@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1291546909
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 10 secondMV
+	ACTION TYPE = 10 with timeStamp 1291546909
+	CreateMVRPC : MV already exists with the same name secondMV
+	CreateMVRPC : reply message is -> 2 : MV already exists
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1291547948@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateMV_Syscall : MV Index received from server is 2
+	CreateMV_Syscall : Msg fron Server : 2 : MV already exists
+
+	******TestFiles : SETP4 Create same MV name secondMV return value is 2*******
+
+	---------------------------------------
+	Multiple nachos instance networking Test
+	---------------------------------------
+	
+	In this situation we can have more freedom and do more choice combination. First we need to 
+	decide how many nachos instance we need to have in the test, then input "nachos -i 1/2/3" for registration
+	server and "nachos -m 1/2/3 -o 0 -x ../test/testfiles". Then in each window we can have different choice.
+	
+	Here is some example for the multiple instance test:
+	
+	+ Acquire & Release synchronization
+	
+	open 2 nachos instance and let them choose 2, and then one choose 2 one choose 3 to make one acquirelock 
+	another release it. Wait for some time we can check the output as follows.
+	
+	
+	CHOOSE THE NUMBER FOR SPECIFIC TEST TO RUN
+	 1> See the single instance Acquire&Release test
+	 2> Make this instance Acquirelock
+	 3> Make this instance Acquire then Releaselock
+	2
+	created addrspace
+	userprog mail box = 1
+	net thread mail box = 2
+	net thread mail box = 2
+	came back here
+	NetworkingThread : in net thread with mail box = 2
+	Networking Thread : start waiting for first msg from user program on mailbox 2
+	Calling start simulation
+	StartSimulation_Syscall
+	StartSimulation_Syscall : sending Are you ready? message to net thread
+	Networking Thread : Got "Are you ready?" from 1, box 1
+	NetworkingThread : received first message from userprog
+	StartSimulation_Syscall : Client sending the StartSimulation request to the networking thread
+	NetworkingThread : Server, get me registered msg sent to server
+	Networking Thread : First Server reply received -  "1@2@" from 0, box 0
+	Networking Thread : Got "102202@ get me registered" from 0, box 0
+	Networking Thread : looping and receiving the data messages from reg server
+	Networking Thread : storing the net thread details machine id = 1 and mail box number = 2
+	Networking Thread : looping and receiving the data messages from reg server
+	Networking Thread : storing the net thread details machine id = 2 and mail box number = 2
+	Networking Thread : looping and receiving the data messages from reg server
+
+	__________________________________________________________
+					INITIAL GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       -1
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       -1
+	__________________________________________________________
+
+	Networking Thread : sending HEY USERPROG, IM READY msg to userprogram at mailbox 1
+
+	WAIT for all NET threads to get ready for group communiation
+	StartSimulation_Syscall : received reply message from net thread
+	StartSimulation_Syscall : Msg from networking thread :  Hey UserProg, Im ready
+
+	In halt1.c
+	CreateLock_Syscall : Client sending the Create Lock request to the Networking Thread
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "1 firstlock1" from 1, box 1
+	CreateLock_Syscall : Client waiting to receive Create Lock request reply
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock1@1292503590@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292503590
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       -1
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock1@1292503590@" from 2, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292503590
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292503590
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock1
+	ACTION TYPE = 1 with timeStamp 1292503590
+	Networking Thread : reply message is -> 0
+	ACTION TYPE = 1 with timeStamp 1292503590
+	Networking Thread : Lock already exists with the same name firstlock1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292505558@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292505575@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292507106@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292507120@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : Msg fron Server : 0
+	CreateLock_Syscall : Client sending the Create Lock request to the Networking Thread
+	CreateLock_Syscall : Client waiting to receive Create Lock request reply
+	Networking Thread : Got "1 firstlock2" from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock2@1292510298@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292510298
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292507106
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock2@1292510334@" from 2, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292510298
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292510334
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock2
+	ACTION TYPE = 1 with timeStamp 1292510298
+	Networking Thread : reply message is -> 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292511834@" from 1, box 2
+	ACTION TYPE = 1 with timeStamp 1292510334
+	Networking Thread : Lock already exists with the same name firstlock2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292511967@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292513373@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292513480@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : Msg fron Server : 1
+	Networking Thread : Got "#@2 0@1292516700@" from 2, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292513373
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292516700
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 0
+	Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292518337@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "2 0" from 1, box 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292396732@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@2 0@1292398208@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292398208
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292518337
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 0
+	ACTION TYPE = 2 with timeStamp 1292398208
+	AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+	Acquire_Syscall : Client receive the reply msg from sever 0
+	Acquire_Syscall : Acquired Lock Index received from server is 0
+	Acquire_Syscall : Msg fron Server : 0 : Lock 0 is Acquired
+
+	*******TestFiles : Acquire the lock use valid Index 0 ********
+
+	*******TestFiles : The return value is 0*********
+
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292399704@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292399720@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+
+	+ another instance
+	
+	Enter the index of the testcase you want to run here ->2
+
+	CHOOSE THE NUMBER FOR SPECIFIC TEST TO RUN
+	 1> See the single instance Acquire&Release test
+	 2> Make this instance Acquirelock
+	 3> Make this instance Acquire then Releaselock
+	3
+	created addrspace
+	userprog mail box = 1
+	net thread mail box = 2
+	net thread mail box = 2
+	came back here
+	NetworkingThread : in net thread with mail box = 2
+	Networking Thread : start waiting for first msg from user program on mailbox 2
+	Calling start simulation
+	StartSimulation_Syscall
+	StartSimulation_Syscall : sending Are you ready? message to net thread
+	Networking Thread : Got "Are you ready?" from 2, box 1
+	NetworkingThread : received first message from userprog
+	StartSimulation_Syscall : Client sending the StartSimulation request to the networking thread
+	NetworkingThread : Server, get me registered msg sent to server
+	Networking Thread : First Server reply received -  "1@2@" from 0, box 0
+	Networking Thread : Got "102202@ get me registered" from 0, box 0
+	Networking Thread : looping and receiving the data messages from reg server
+	Networking Thread : storing the net thread details machine id = 1 and mail box number = 2
+	Networking Thread : looping and receiving the data messages from reg server
+	Networking Thread : storing the net thread details machine id = 2 and mail box number = 2
+	Networking Thread : looping and receiving the data messages from reg server
+
+	__________________________________________________________
+					INITIAL GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       -1
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       -1
+	__________________________________________________________
+
+	Networking Thread : sending HEY USERPROG, IM READY msg to userprogram at mailbox 1
+
+	WAIT for all NET threads to get ready for group communiation
+	StartSimulation_Syscall : received reply message from net thread
+	StartSimulation_Syscall : Msg from networking thread :  Hey UserProg, Im ready
+
+	In halt1.c
+	CreateLock_Syscall : Client sending the Create Lock request to the Networking Thread
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "1 firstlock1" from 2, box 1
+	CreateLock_Syscall : Client waiting to receive Create Lock request reply
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock1@1292503590@" from 2, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       -1
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292503590
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock1@1292503590@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292503590
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292503590
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock1
+	ACTION TYPE = 1 with timeStamp 1292503590
+	Networking Thread : reply message is -> 0
+	ACTION TYPE = 1 with timeStamp 1292503590
+	Networking Thread : Lock already exists with the same name firstlock1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292505575@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292505558@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292507120@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292507106@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : Msg fron Server : 0
+	CreateLock_Syscall : Client sending the Create Lock request to the Networking Thread
+	Networking Thread : Got "1 firstlock2" from 2, box 1
+	CreateLock_Syscall : Client waiting to receive Create Lock request reply
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock2@1292510298@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292510298
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292507106
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@1 firstlock2@1292510334@" from 2, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292510298
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292510334
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 1 firstlock2
+	ACTION TYPE = 1 with timeStamp 1292510298
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292511834@" from 1, box 2
+	ACTION TYPE = 1 with timeStamp 1292510334
+	Networking Thread : Lock already exists with the same name firstlock2
+	Networking Thread : reply message is -> 1 : Lock already exists
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292511967@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292513373@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292513480@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	CreateLock_Syscall : Msg fron Server : 1 : Lock already exists
+	Networking Thread : Got "2 0" from 2, box 1
+	Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@2 0@1292516700@" from 2, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292513373
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292516700
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 0
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292518337@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292396732@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "#@2 0@1292398208@" from 1, box 2
+
+	__________________________________________________________
+							GROUP  TABLE
+	__________________________________________________________
+	 Machine        |       Mailbox         |       Timestamp
+	 1              |       2               |       1292398208
+	 Machine        |       Mailbox         |       Timestamp
+	 2              |       2               |       1292518337
+	__________________________________________________________
+
+	Networking Thread : Storing the message in event order queue = 2 0
+	ACTION TYPE = 2 with timeStamp 1292398208
+	AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292399704@" from 2, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+	Networking Thread : Got "$@1292399720@" from 1, box 2
+
+	Networking Thread : waiting to receive message in WHILE loop
+
+
+	Extra Credit
+	
+	How to test
+	
+	In the command for 2 instances of kernel function nachos -m 0 -E1 -l 0.5 and nachos -m 1 -E1 -l 0.5 must be executed.
+	For 4 instances of kernel function nachos -E2 -m 0 -l 0.5, nachos -m 1 -E2 -l 0.5, nachos -m 2 -E2 -l 0.5, nachos -E2 -m 3 -l 0.5
+	in different command prompt must be executed. 
+	
+	For -l value with 0.1 it takes approximately 45 minutes to 1 hour to get all the acknowledgements.
+	
+	Test Ouput
+	
+	All the packets get exchanged between all the active clients and also each of the packets will get acknowledged 
+	under any value of -l flag.
+	
+	
+	VI Discussion:
+	
+		+ Extra Credit
+			
+			Experiment expectation
+				
+				All the packets sent by all the kernel functions to get exchanged with proper acknowledgement.
+				
+			Experiment Result
+
+				All the packets are sent and acknowledgement for all of these are received.
+				
+			Explanation
+				
+				In case 1 of extra credit two kernel functions exchange 5 messages each and receive acknowledgements even when
+				the network performance is not 100%.
+				
+				In case 2 of extra credit four kernel functions exchange 5 messages each and receive acknowledgements even when
+				the network performance is not 100%.
+				
+
+
+
+
+
+
+
+
+
+
+
+	

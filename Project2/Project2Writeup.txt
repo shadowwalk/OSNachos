@@ -1,0 +1,216 @@
+Title: Writeup for Project 2, Fall 2010
+Date : 10/02/2010
+Group Num: 58
+
+Name				   	Email			Student Id 
+Naveen Bangalore NanjundaPrasad	   	nbangalo@usc.edu	5752-7730-16
+Vishak Nag Ashoka		  	ashoka@usc.edu      	9791-1175-66
+Jida Wen			   	jidawen@usc.edu     	6412-1395-84 
+
+I. Requirements:
+
+      + Gerneral Objective:
+	Change the Nachos to make it support multiprogramming.
+
+	+ Implement the system calls and exception handling:
+	  
+	  + Create the system calls for mutual exclusive for Lock and Condition class
+	    The requirement for this part is to write the code for Lock and Condition class include Create and Destory the Lock and Condition, Acquire and Release the 
+	    lock and the three function for ConditionVariable namely Wait,Signal and Broadcast. So add these new system call in the exception.cc file. To create and 
+	    destroy the locks or conditions we need the following systemcalls CreateLock, DestroyLock, CreateCondition and DestroyCondition. Also when we want to use 
+	    them we need other systemcalls like Acquire(), Release() for Locks and Wait(), Signal(), Broadcast() for Conditions. 	    
+
+	    Requirement for the return value is an index position for the kernel structure of actual Lock and Condition objects. Then we can use that index to perform 
+	    the synchronizing fuction like Acquire() or Signal().
+
+	    The answer must include a test suite of user programs that demonstrate the correctness of these systemcalls and showing the syetem is sage from errors. 	    
+	    That requires these systemcalls do not crash Nachos even when use incorrectly. Document the test suite to make the output clear and comment it. It should 	
+    	    be userprogram and demonstrate the line buffering behavior of your synchronized console.
+
+	  + Creat the system calls for multiprogramming:	     	
+	    The requirement for this part is to complete the system call for thread or process operation. Because in multiprogramming operating system we need to 	
+    	    support more then one thread and process, so we need the system call to create them. There are four systemcalls need to be completed which are Fork, Exec, 	 
+   	    Exit and Yield.
+
+	    For the Fork systemcall, it forks a new thread and create the stack in the same address space. While the Exec systemcall create the new process with a 	 
+  	    thread in a new address space. The yield is just yield current thread. As for the Exit, we must ensure the Thread->finish is called,  except for the very 	 
+   	    last thread running in Nachos. And for that exception we must call interrupt->Halt() to actually stop Nachos. Since this part systemcalls is related to 	
+    	    address space, so we need to make sure every thread gets the right address in proper ways.
+
+	+ Complete the address space construction and finish multiprogramming implement:
+	  The requirement for this part is to implement the multiprogramming. To do this we need to come up with a way of allocating physical memory frames so thet 	
+	  multiple programs can be loaded into memory at once. It is also need to Provide a way of copying data to/from the kernel from/to the user's virtual address
+ 	  space.
+	
+	  It is also required to finish the Fork and EXec systemcall in this part, because these system calls need to access the address space to perform correctly. 
+	  So we should complete the Fork and Exec systemcall when we find the way to deal with the address space. 
+	
+	  Design and demonstrate a test suite that shows that Exec and Fork perform correctly. The test must show  not only that proper input to Fork and Exec work
+	  properly, but that improper input is captured and dealt with appropriately. In no case should Nachos terminate abnormally.
+
+
+	+ Implement part 2 in Project 1 as the multithreaded Nachos user program and test it:
+
+	  The requirement for this part is to use the systemcalls and the changes above to run the userprogram in part 2 in project 1. We should first transform it
+	  into the userprogram form. And it should be possible to have multiple "Carl's Jrs" processes independently by using the Exec system call. Also the Fork call
+	  can create all those threads we needed.
+
+	  It is required to provide a test suite that proves this implementation is correct. It myst fully explain what Locks and Condition Variables you use in your 
+	  solution and how it guarantees proper synchronization between the threads in the tests.
+
+
+II. Assumption:
+
+III. Design:
+
+	+ Implement systemcalls for class Lock and Conditions
+	  
+	  + Create the Lock systemcall:
+	    Since the Nachos user program is C and have no class so we need to write those systemcall fuction for lock and condition. And in order to use the lock 
+	    and conditionvariable we need to Create them first. So the userprogram can make a link between user mode and kernel mode by this call and this function 
+	    call create the lock object for the userprogram.
+
+	    In order to do this, we must get the desired initial address and length of the lock which can be passed by the function arguments. 
+	    Then before we create it, we must make sure it not violate the following conditions. First is the the virtual address of this lock cannot exceed or less
+	    then the available address space. Second is the number of the lock cannot exceed the max allowed lock number. The last is the KernelLockListLock is also 
+	    exist.
+
+	    Then we need to acquire the KernelLockListLock to modify the lock table which is shared data and begin the process of creating the lock object. And when
+	    create the lock we just use the nextlockindex variable to locate the position of specific lock and it is a quite important data which is the link between
+	    the userprogam and kernel and also can be used in other Lock systemcalls like Acquire. Then we use this index to create the properties of the lock like its
+	    name, address space, usage conuter and the destory flag show whether it is end or not. In the last step we increase the index value and return the index
+	    of currentlock.
+	  
+	  + Create the Condition systemcall:
+	    The design for creating the Condition variable is quite similar with the Lock. We also check the address space, the max Condition number and the 
+	    availability of kernelCVListLock before we actually make the Condition. We do almost the same thing to create the condition variable except this time
+	    is in a Condition table and the name is different.
+	  
+	  + Destory Lock or Condition systemcalls:
+	    Like Create the Lock or Condition systemcall we need to check the adress space and the lock of locktable or the Conditiontable and check whether it is
+	    a valid Lock or exist Lock. Then we just delete the lock or condition property of the specific index of the lock class is make a destory on the Lock or 
+	    Conditions 
+	
+	  + Lock Acquire and Release systemcalls:
+	    When using these system call it's under the condition we already created the correspondent Lock object. So we must make sure this Lock is exsit and it
+	    does not belong to other threads. By comparing the address space, the threadname and the index number we can see whether this systemcall is legally. If
+	    everything is OK, we increase the usagecounter, change the destory flag and execute the Acquire or Release function. 
+	  
+	  + Wait systemcall:
+	    Similar to the Acquire or Release the lock, When we need to use these functions in ConditionVariable we also need have a created Condition first. So the 
+	    first step is to check the whether the argument is right. We check the address space, the kernelCVlock and the correspondent lock. Because when the 
+	    userprogram call Wait it should have an argument of a lock. So different from the Acquire we need to check the cOrrectness. If the index of this passed 
+	    lock is illegal or does not match current thread we should also print the wrong message. After all these check is done we can increase the usage count
+	    change the destroy flag and call the Wait function with the given lock.	    	    
+	  
+	  + Signal and Broadcast systemcalls:
+	    The first step of these system are very similar with Wait. We check the correctness of passed ConditionVariable and Lock. Then we need an additional 
+	    procedure: make sure there is someone in the waiting list to wait for a signal. So we check the list, if there is no one waiting we set destroy flag and
+	    return. If there is someone waiting we need to change the usage counter and call the kernel Condition function Signal or Broadcast with the right lock. 
+	   
+	  + Yield systemcalls:
+	    This systemcall is easy to implement, we just need to call the currentthread Yield function. Since there are less other situations in this case.
+	
+	  + fork
+	
+	  + exec
+
+
+VI. Implementation:
+
+	+ Files modified	  
+	  Exception.cc
+
+        + Files added 
+
+	
+	+ Data Structures added, and the file they were added to. 
+
+
+
+	+ Data Structures modified, and the file they were added to. 
+
+                        
+
+	+ Functions added and in which file. 
+
+								--added in file Exception.cc/Exception.h
+	  int CreateLock_syscall(unsigned int vaddr, int len){
+		
+	  }
+	  
+	  void Acquire_syscall(unsigned int lockIndex){
+		
+	  }
+	
+	  void Release_syscall(unsigned int lockIndex){
+	  
+	  }
+
+	  void DestroyLock_Syscall(unsigned int lockIndex) {
+
+	  }
+
+	  int CreateCV_Syscall(unsigned int vaddr, int len) {
+
+	  }
+
+	  void Wait_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+	  }
+	
+	  void Signal_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+		
+	  }
+	
+	  void Broadcast_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+	  }
+	
+	  void DestroyCV_Syscall(unsigned int CVIndex) {
+	
+	  }
+
+	  void Yield_Syscall() {
+		
+	  }
+
+
+
+
+	+ Functions modified and in which file. 
+
+
+
+
+
+
+
+
+
+
+V. Testing:  (For each test case, you must show) 
+            + How to test 
+
+- How to run the test cases, the commands, the arguments and so on. 
+
+            + Test Output 
+
+- Describe the testing output. You don't have to dump all the output info. Just make sure your description can exactly reflect your output. 
+
+VI. Discussion: 
+            + Experiment expectation.  (What you hope will happen.) 
+
+            + Experiment result.  (What actually happens.) 
+
+            + Explanation 
+
+                        - Explain your experiment result. 
+
+VII. Miscellaneous: 
+- Whatever else you want the grader know about your development.  You can create your own subsections headings here. 
+
+
+
+ 
+

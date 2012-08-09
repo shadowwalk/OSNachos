@@ -1,0 +1,720 @@
+Title: Writeup for Project 2, Fall 2010
+Date : 10/10/2010
+Group Num: 58
+
+Name				   				Email					Student Id 
+Naveen Bangalore NanjundaPrasad	   	nbangalo@usc.edu		5752-7730-16
+Vishak Nag Ashoka		  			ashoka@usc.edu      	9791-1175-66
+Jida Wen			   				jidawen@usc.edu     	6412-1395-84 
+
+------------------
+I. Requirements:
+------------------
+
+      ----------------------
+      + Gerneral Objective:
+      ----------------------
+	
+	Change the Nachos to make it support multiprogramming.
+
+	+ Implement the system calls and exception handling:
+	  
+	-----------
+	  Part 1
+	-----------
+
+	  + Create the system calls for mutual exclusive for Lock and Condition class
+
+	    The requirement for this part is to write the code for Lock and Condition class include Create and Destroy the Lock
+		and Condition, Acquire and Release the lock and the three function for ConditionVariable namely Wait,Signal and Broadcast.
+		So, add these new system call in the exception.cc file. To create and destroy the locks or conditions we need the following
+		system calls CreateLock, DestroyLock, CreateCondition and DestroyCondition. Also, when we want to use them we need other 
+		system calls like Acquire(), Release() for Locks and Wait(), Signal(), Broadcast() for Conditions. 	    
+
+	    Requirement for the return value is an index position for the kernel structure of actual Lock and Condition objects. Then we
+		can use that index to perform the synchronizing function like Acquire() or Signal().
+
+	    The answer must include a test suite of user programs that demonstrate the correctness of these systemcalls and showing the 
+		system is safe from errors. That requires these systemcalls do not crash Nachos even when use incorrectly. Document the 
+		test suite to make the output clear and comment it. It should be a userprogram and demonstrate the line buffering behavior of the
+		synchronized console.
+
+	-----------
+	  Part 2
+	-----------
+
+	  + Create the system calls for multiprogramming:	     	
+
+	    The requirement for this part is to complete the system call for thread or process operation. Because in multiprogramming
+		operating system we need to support more then one thread and process, so we need the system call to create them. There are four
+		system calls need to be completed which are Fork, Exec, Exit and Yield.
+
+	    For the Fork system call, it forks a new thread and create the stack in the same address space. While the Exec system call create the 
+		new process with a thread in a new address space. The yield just yields current thread. As for the Exit, we must ensure the Thread->finish
+		is called,  except for the very last thread running in Nachos. And for that exception we must call interrupt->Halt() to actually stop
+		Nachos. Since this part system calls is related to address space, so we need to make sure every thread gets the right address in proper 
+		way.
+
+
+	+ Complete the address space construction and finish multiprogramming implementation:
+
+	  The requirement for this part is to implement multiprogramming. To do this we need to come up with a way of allocating physical memory pages
+	  so that multiple programs can be loaded into memory at once. It is also needed to provide a way for copying data to/from the kernel from/to
+	  the user's virtual address space.
+	
+	  It is also required to finish the Fork and Exec system call in this part, because these system calls need to access the address space to
+	  perform correctly. So we should complete the Fork and Exec system call where we find the way to deal with the address space. 
+	
+	  Design and demonstrate a test suite that shows that Exec and Fork perform correctly. The test must show  not only that proper input to
+	  Fork and Exec work properly, but that improper input is captured and dealt appropriately. In no case should Nachos terminate abnormally.
+	
+	-----------  
+	  Part 3
+	-----------
+
+	+ Implement part 2 in Project 1 as the multithreaded Nachos user program and test it:
+
+	  The requirement for this part is to use the system calls and the changes above to run the user program in part 2 in project 1. We should
+	  first transform it into the userprogram, and it should be possible to have multiple "Carl's Jr" processes run independently by using the
+	  Exec system call. Also, the Fork call can create all those threads we needed. It is required to provide a test suite that proves this
+	  implementation is correct. It must fully explain what Locks and Condition Variables you use in your solution and how it guarantees proper
+	  synchronization between the threads in the tests.
+
+------------------
+II. Assumption:
+------------------
+
+	No Assumptions.
+
+------------------
+III. Design:
+------------------
+
+	-----------------------------------------------------
+	+ Implement systemcalls for class Lock and Conditions
+	-----------------------------------------------------	  
+	  + Create the Lock system call:
+	
+	    Since the Nachos user program is C and have does not support C++ classes we need to write those system call functions for lock and
+		condition. And in order to use the lock and condition variable we need to Create them first. So the userprogram can make a link between
+		user mode and kernel mode by this call and this function call create the lock object for the userprogram.
+
+	    In order to do this, we must get the desired initial address and length of the lock which can be passed by the function arguments. 
+	    Then before we create it, we must make sure it does not violate the following conditions. First, the the virtual address of this lock
+		cannot exceed or less then the available address space. Second is that the number of the locks cannot exceed the max allowed lock number.
+		The last is the KernelLockListLock is also exist.
+
+	    Then we need to acquire the KernelLockListLock to modify the lock table which is shared data and begin the process of creating the lock object.
+		And when create the lock we just use the nextlockindex variable to locate the position of specific lock and it is a quite important
+		data which is the link between the userprogam and kernel and also can be used in other Lock systemcalls like Acquire. Then we use this index to
+		create the properties of the lock like its name, address space, usage counter and the destroy flag show whether it is end or not. In
+		the last step we increase the index value and return the index of currentlock.
+	  
+	  + Create the Condition system call:
+	    
+	    The design for creating the Condition variable is quite similar with the Lock. We also check the address space, the max Condition
+		number and the availability of kernelCVListLock before we actually make the Condition. We do almost the same thing to create the
+		condition variable except this time is in a Condition table and the name is different.
+	  
+	  + Destory Lock or Condition system calls:
+
+	    Like Create the Lock or Condition systemcall we need to check the address space and the lock of lock table or the Condition table and
+		check whether it is a valid Lock or exist Lock. Then we just delete the lock or condition property of the specific index of the lock 
+		class is make a destory on the Lock or Conditions 
+	
+	  + Lock Acquire and Release system calls:
+	    
+	    When using these system call it's under the condition we already created the correspondent Lock object. So we must make sure this Lock
+		is exsit and it does not belong to other threads. By comparing the address space, the threadname and the index number we can see 
+		whether this systemcall is legally. If everything is OK, we increase the usage counter, change the destroy flag and execute the Acquire
+		or Release function. 
+	  
+	  + Wait system call:
+	    
+	    Similar to the Acquire or Release the lock, When we need to use these functions in Condition Variable we also need have a created
+            Condition first. So the first step is to check the whether the argument is right. We check the address space, the kernelCVlock and the
+            correspondent lock.
+         	Because when the userprogram call Wait it should have an argument of a lock. So different from the Acquire we need to check the
+		correctness. If the index of this passed lock is illegal or does not match current thread we should also print the error message.
+		After all these check is done we can increase the usage count change the destroy flag and call the Wait function with the given lock.	    	    
+	  
+	  + Signal and Broadcast systemcalls:
+	    
+	    The first step of these system are very similar to Wait. We check the correctness of passed ConditionVariable and Lock. Then we need
+		an additional procedure: make sure there is someone in the waiting list to wait for a signal. So we check the list, if there is no one
+		waiting we set destroy flag and return. If there is someone waiting we need to change the usage counter and call the kernel Condition
+		function Signal or Broadcast with the right lock. 
+	   
+	  + Yield system call:
+	    
+	    We just need to call the current thread Yield function. Since there are less other situations in this case.
+	
+	  + fork
+
+	     The Fork system call is used to create a new thread. This method before creating a new thread verifies whether the virtual address
+		 given as input falls within the limit of space size if not prints a error message. Next, the entire process table is searched to match
+		 the process address space and find the process id of the parent process. After this, a new address space is created which 8 pages
+		 larger in size than previous one and the contents of the previous address space is copied to new one. Next, the bit map is searched
+		 to find the free pages available in physical memory. Finally, a new thread has been created and the thread count in the process table
+		 is increased and the new thread count is given to the newly created thread. The address space of the process and the stack top are
+		 assigned to the new thread. The KernFunc is called to update the contents of the PCRreg, StackReg and NextPCReg.
+	  
+	  + exec
+		
+	     The Exec System Call creates a new process. It initially creates a new address space and loads the executable into it. Then a process
+		 is created and it is assigned this address space. The process count is incremented, thread count, stack top address and address space
+		 information is updated into process table by using a lock. Next, the ExecFunc system call is forked inorder to set the registers to
+		 appropriate values. The ExecFunc computes the stack start and writes this values into the StackReg Register, then it restores the 
+		 page table and jumps to the user mode. Finally, the Exec system call returns the pid of the process that has been created.
+	
+	  + exit
+	  
+	     The exit system call handles three cases. First before checking for one of the cases, the thread is identified from which process
+		 it is by matching the address space of the thread and each of the processes that current exits. In the first case, we check whether
+		 their exists only one process if so the number of active process variable is decremented and the interrupt halt is called. In second
+		 case, if the last thread in a process has invoked exit then we get the physical page numbers from page table and clear these physical
+		 pages in main memory using bit map clear method. Also, the thread's address space is set to NULL; which indicates that the address
+		 space has been deleted.Finally, for this case we call finish method. In the third case, wherein a thread in group of threads in a
+		 process has called exit we delloacate the stack by getting it's page number and passing it to clear method of bit map.
+
+	  + print_stmt
+
+	    The print_stmt system call takes a line of text from the user and prints the text in the kernel mode. It uses the copyin function 
+		and copies the text from the virtual address, and then we check if a '$' symbol has been encountered; which indicates the end of input
+		, then prints out the text using printf system call.
+
+	  + print_1Arg
+		
+	    The print_1Arg system call takes a Integer value from the user and prints the value in the kernel mode. It uses the copyin function
+		and copies the text from the virtual address, and then we check if a '$' symbol has been encountered; which indicates the end of input,
+		then prints out the value using printf system call.
+
+	  + print_2Arg
+		
+	    The print_2Arg system call takes two integer values from the user and prints the values in the kernel mode. It uses the copyin function
+		and copies the text from the virtual address, and then we check if a '$' symbol has been encountered; which indicates the end of input,
+		then prints out the value using printf system call.
+	  
+	  + print_3Arg
+
+	    The print_3Arg system call takes three integer values from the user and prints the values in the kernel mode. It uses the copyin
+		function and copies the text from the virtual address, and then we check if a '$' symbol has been encountered; which indicates the
+		end of input, then prints out the value using printf system cal
+	  
+	  + Scan 
+	  
+	    The Scan System call takes one argument %d and internally uses copyin function to copy the value from the virtual address. It then
+		uses the scanf system call to retrieve the value and then returns this values.
+
+	  + sprint 
+
+	    The sprint system call takes two parameters, one is text and another is any integer. It appends the text and the integer value sent
+		as an argument. It reads the text and appends the integer and copies the result to another buffer and then calls the sprintf system
+		call to perform the function.
+
+
+---------------------
+VI. Implementation:
+---------------------
+
+	+ Files modified	  
+	  
+	 -- Exception.cc
+	 -- addrspace.cc 
+    	 -- addrspace.h
+	 -- start.s
+	 -- syscall.h
+	 -- thread.cc
+	 -- thread.h
+	 -- system.cc
+	 -- system.h
+	 -- testfiles.c
+	 -- machine.cc
+
+        + Files added 
+	
+	-- carlsjr.c		// in test directory
+	
+	+ Data Structures added, and the file they were added to. 
+
+							--- all these data structures were added to system.h
+		typedef struct
+		{
+			Lock *lock;
+			AddrSpace *lockAddrSpace;
+			int usageCounter;
+			bool toBeDestroyed;
+		}KernelLock;
+
+
+
+		typedef struct
+		{
+			Condition *condition;
+			AddrSpace *conditionAddrSpace;
+			int usageCounter;
+			bool toBeDestroyed;
+		}KernelCV;
+
+
+
+		typedef struct
+		{	
+			int Pid;
+			int threadCount;
+			AddrSpace *addrSpace;
+			int stackTops[MAX_THREADS];
+		}Process;	
+
+
+	+ Data Structures modified, and the file they were added to. 
+
+		      
+		      Class AddrSpace				---- addrspace.h
+		      {
+	
+			Table fileTable;		
+			unsigned int spaceSize;		
+
+		      }
+
+	+ Functions added and in which file. 
+
+								--added in file Exception.cc/Exception.h
+	  int CreateLock_syscall(unsigned int vaddr, int len){
+		
+	  }
+	  
+	  void Acquire_syscall(unsigned int lockIndex){
+		
+	  }
+	
+	  void Release_syscall(unsigned int lockIndex){
+	  
+	  }
+
+	  void DestroyLock_Syscall(unsigned int lockIndex) {
+
+	  }
+
+	  int CreateCV_Syscall(unsigned int vaddr, int len) {
+
+	  }
+
+	  void Wait_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+	  }
+	
+	  void Signal_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+		
+	  }
+	
+	  void Broadcast_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+	  }
+	
+	  void DestroyCV_Syscall(unsigned int CVIndex) {
+	
+	  }
+
+	  void Yield_Syscall() {
+		
+	  }
+
+	  void Exit_Syscall(int status) {
+
+	  }
+
+	  void Fork_Syscall(unsigned int vaddr){
+	
+	  
+	  } 
+
+	int GetNumPages(){
+
+
+
+
+	}
+
+	void SetNumPages(unsigned int newNumPages){
+
+
+
+	}
+	
+	TranslationEntry* GetPageTableRef(){
+
+
+
+
+	}
+	
+	void SetPageTableRef(TranslationEntry *newPageTable){
+
+
+	
+	}
+	
+	void DeletePageTable(){
+
+
+	}
+
+
+	+ Functions modified and in which file. 
+
+	AddrSpace(OpenFile *executable)		// address space constuctor
+	{
+
+	}
+
+
+-----------------
+V. Testing: 
+-----------------
+
+	   When the user executes the following command "nachos -x ../test/tesfiles" the following menu will be displayed.
+
+	   >>>>>>>>> TEST CASES <<<<<<<<<
+
+	 1 > Create Lock Syscall Test
+	 2 > Acquire Lock Syscall Test
+	 3 > Release Lock Syscall Test
+	 4 > Destroy Lock Syscall Test
+	 5 > Create CV Syscall Test
+	 6 > Wait-Signal Syscall Test
+	 7 > Broadcast Syscall Test
+	 8 > Destroy CV Syscall Test
+	 9 > Yield Syscall Test
+	10 > Fork Syscall Test
+	11 > Exec Syscall Test
+	12 > Exit Syscall Test
+	
+	-----------------
+	Lock System call
+	-----------------
+	+ How to test 
+
+		The user has to enter "1" to test for creating a Lock System Call. This tests the Lock system call for creating a Lock,
+		trying to create a Lock with invalid Lock name length and trying to create a Lock with length of name greater than the
+		MAX_CHARLEN.
+
+	+ Test Output 
+
+	    The following output will be displayed for this test
+
+
+		Creating a Lock successfully
+
+		Trying to create a Lock with invalid Lock name length
+		CreateLock_Syscall:Invalid Virtual address length
+
+		Trying to create a Lock with length of name greater than the MAX_CHARLEN
+		CreateLock_Syscall:Exceeding Max Lock Name length
+
+		-------------------------------------------------------------
+		No threads ready or runnable, and no pending interrupts.
+		Assuming the program completed.
+		Machine halting!
+
+	------------------------
+	Acquire Lock System Call
+	------------------------
+	+ How to test
+
+		The user has to enter "2" to test for Acquire Lock System Call. This tests the Acquire system call for creating Lock AcquireLock,
+		acquire a lock and trying to acquire a lock with an invalid lock index.
+
+	+ Test Output 
+
+	    The following output will be displayed for this test
+
+		Acquiring a Lock successfully
+
+		Trying to acquire a lock with an invalid lock index
+		Acquire_Syscall:Invalid Lock index
+
+		-------------------------------------------------------------
+		No threads ready or runnable, and no pending interrupts.
+		Assuming the program completed.
+		Machine halting!
+
+	 -------------------------
+	 Release Lock System Call
+	 -------------------------
+
+	 + How to test
+
+		The user has to enter "3" to test for Release Lock System Call. This tests the Release Lock system call for creating Lock ReleaseLock,
+		Releasing a lock and trying to Release a Lock with an invalid Lock index.
+
+	+ Test Output 
+
+	    The following output will be displayed for this test
+
+		Releasing a Lock successfully
+
+		Trying to Release a Lock with an invalid Lock index
+		Release_Syscall:Invalid Lock index
+	
+		-------------------------------------------------------------
+		No threads ready or runnable, and no pending interrupts.
+		Assuming the program completed.
+		Machine halting!
+
+	-------------------------
+	Destroy Lock System Call
+	-------------------------
+	 + How to test
+
+		The user has to enter "4" to test for Destroy Lock System Call. This tests the Destroy Lock system call for creating Lock DestroyLock,
+		Destroying a Lock successfully and trying to destroy a Lock which is not released yet.
+
+	+ Test Output 
+
+	    The following output will be displayed for this test
+	
+		Trying to destroy a Lock which is not released yet
+		DestroyLock_Syscall:Lock under use!
+
+		Destroying a Lock successfully
+		Acquire_Syscall:Lock does not exist
+
+		-------------------------------------------------------------
+		No threads ready or runnable, and no pending interrupts.
+		Assuming the program completed.
+		Machine halting!
+
+
+	-----------------------------
+	Condtion Variable System Call
+	-----------------------------
+
+	 + How to test
+
+		The user has to enter "5" to test for Condtion Variable System Call. This tests the Condtion Variable system call for creating Condtion
+		Variable, Invalid Virtual address length, trying to access Invalid Virtual address and trying to exceed Max CV Name length.
+
+	+ Test Output 
+
+	    The following output will be displayed for this test
+
+		Creating a CV successfully
+		CreateCV_Syscall:Invalid Virtual address length
+		CreateCV_Syscall:Trying to access Invalid Virtual address
+		CreateCV_Syscall:Exceeding Max CV Name length
+
+		-------------------------------------------------------------
+		No threads ready or runnable, and no pending interrupts.
+		Assuming the program completed.
+		Machine halting!
+
+	------------------------
+	Wait-Signal System Call
+	------------------------
+	 + How to test
+
+		The user has to enter "6" to test for Wait-Signal System Call. This tests the Wait-Signal system call for  creating waitLock,
+		creating  Condtion Variable,threads going on wait and signalling those threads which are on wait.
+
+	+ Test Output 
+
+	    The following output will be displayed for this test
+		
+		Wait Thread : I am the child thread going on wait
+		Wait Thread : Acquire the Lock to become eligible to be a waiter
+		Wait Thread : Going on wait!!
+
+		Signal Thread : I am the child thread signalling the waiting thread
+		Signal Thread : Acquire the Lock to wake up the waiter
+		Signal Thread : Signalling the waiter
+
+		Wait Thread : I am back from wait
+		Machine halting!
+
+	----------------------
+	Broadcast System Call
+	----------------------
+
+	 + How to test
+
+		The user has to enter "7" to test for Broadcast System Call. This tests the Broadcast system call for creating BroadcastLock,
+		creating  Condtion Variable,threads going on wait and Broadcasting those threads which are on wait.
+
+	+ Test Output 
+
+	    The following output will be displayed for this test
+		
+		Wait Thread : I am the child thread going on wait
+		Wait Thread : Acquire the Lock to become eligible to be a waiter
+		Wait Thread : Going on wait!!
+	
+		Wait Thread : I am the child thread going on wait
+		Wait Thread : Acquire the Lock to become eligible to be a waiter
+		Wait Thread : Going on wait!!
+
+		Broadcast Thread : I am the child thread broadcasting the waiting threads
+	
+		Broadcast Thread : Acquire the Lock to wake up the waiters
+
+		Broadcast Thread : Broadcast the Signal
+
+		Wait Thread : I	am back from wait
+
+		Wait Thread : I am back from wait
+		Machine halting!
+
+	------------------------
+	Destroy CV System Call
+	------------------------
+
+	 + How to test
+
+		The user has to enter "8" to test for Destroy CV System Call. This tests the Destroy CV system call for creating  Condtion Variable,
+		trying to destroy a CV which is not created yet, Destroying a CV successfully.
+
+	+ Test Output
+		
+		The following output will be displayed for this test
+
+		condition variable 0 created
+
+		Trying to destroy a CV which is not created yet
+		DestroyCV_Syscall:Invalid CV index
+
+		Destroying a CV successfully
+		No threads ready or runnable, and no pending interrupts.
+		Assuming the program completed.
+		Machine halting!
+
+	-------------------	
+	Yield System Call
+	-------------------
+
+	 + How to test
+
+		The user has to enter "9" to test for Yield System Call. This tests the Yield system call for yielding a thread that has been
+		forked.
+
+
+	+ Test Output
+		
+		The following output will be displayed for this test
+
+		Yield Thread : I am going to Yield now
+		Machine halting!
+
+	------------------	
+	Fork System Call
+	------------------
+
+	 + How to test
+
+		The user has to enter "10" to test for Fork System Call. This tests the Fork system call for creating threads.
+
+
+	+ Test Output
+		
+		The following output will be displayed for this test
+
+		Parent : I am the parent, Forking child thread 1
+
+		Parent : I am the parent, Forking child thread 2
+
+		Forked Thread : I am the child thread Forked
+
+
+		Forked Thread : I am the child thread Forked
+
+		Machine halting!
+
+	------------------
+	Exec System Call
+	------------------
+	 + How to test
+
+		The user has to enter "11" to test for Exec System Call. This tests the Exec system call for creating a new process.
+
+
+	+ Test Output
+		
+		The following output will be displayed for this test
+
+		The file 'test/testfiles' is EXECed to create a new process so you can see the same menu replicated
+
+		This is the output of the EXEC call ../test/testfiles
+
+                                >>>>>>>>> TEST CASES <<<<<<<<<
+
+		 1 > Create Lock Syscall Test
+		 2 > Acquire Lock Syscall Test
+		 3 > Release Lock Syscall Test
+		 4 > Destroy Lock Syscall Test
+		 5 > Create CV Syscall Test
+		 6 > Wait-Signal Syscall Test
+		 7 > Broadcast Syscall Test
+		 8 > Destroy CV Syscall Test
+		 9 > Yield Syscall Test
+		 10 > Fork Syscall Test
+		 11 > Exec Syscall Test
+		 12 > Exit Syscall Test
+
+	------------------
+	Exit System Call
+	------------------
+
+	 + How to test
+
+		The user has to enter "11" to test for Exit System Call. This tests the Exit system call for 3 cases like a single thread
+		in complete nachos, thread exiting in a process and for last thread in a process.
+
+
+	+ Test Output
+		
+		The following output will be displayed for this test
+
+		Creating thread1 >>>
+
+		Creating thread2 >>>
+
+		Exit Thread : I am going to Exit now!!
+		If I am the Last Thread in NACHOS then you will see 'Machine halting!' in the next line
+	
+		Exit Thread : I am going to Exit now!!
+		If I am the Last Thread in NACHOS then you will see 'Machine halting!' in the next line
+		Machine halting!
+
+ 
+------------------
+VI. Discussion: 
+------------------
+
+            + Experiment expectation. 
+
+		The experiment requires to make NACHOS a multi-programming and multi-threading Operating System. Also, to provide users
+		with system calls to ensure safe working of NACHOS. Also, to make the Carl's Jr Restaurant simulation work for two instances.
+
+            + Experiment result.
+
+		17 system calls have been designed and implemented to ensure safe working of NACHOS. NACHOS also has been modified to support
+		multi-programming and multi-threading. The project 1 Carl's Jr has been converted and added with system calls to perform various
+		functions. Also, experiment successfully runs for 2 instances of Carl's Jr. simulation.
+
+
+            + Explanation 
+
+		The System calls designed and developed works succesfully and performs the functions they are required to do. The test cases for
+		all the system calls work fine. When two instances of Carl's Jr restaurant is run, it will perform two execs and generate two
+		Carls Jr. processes and all the entities in Carls Jr. to our knowledge are interacting correctly and generating the desired
+		output.
+			
+--------------------
+VII. Miscellaneous: 
+--------------------
+ 
+	We have designed and implemented Sprintf system call, but not invoked it anywhere in the code.
+
+
+ 
+
